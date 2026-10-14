@@ -1,0 +1,14 @@
+{
+  "name": "ThinkingLab 思考實驗室",
+  "short_name": "ThinkingLab",
+  "description": "個人思考工具資料庫：九宮格、心智圖、SWOT、5 Why…加密儲存、多裝置同步",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f2ea",
+  "theme_color": "#2f5d50",
+  "lang": "zh-Hant-TW",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

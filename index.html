@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.github.com; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#f5f2ea" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#14171c" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="ThinkingLab">
+  <title>ThinkingLab 思考實驗室</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="css/style.css">
+  <style id="print-page-style"></style>
+</head>
+<body>
+  <div id="gate"></div>
+
+  <div id="shell" hidden>
+    <header class="topbar">
+      <a class="brand" href="#/"><span class="brand-mark">◇</span><span>Thinking<b>Lab</b></span></a>
+      <span class="sp"></span>
+      <button class="btn btn-primary btn-sm" id="new-btn">＋ 新增</button>
+      <button class="sync-ind" id="sync-ind" data-s="off"><i></i><span></span></button>
+      <button class="icon-btn" id="theme-btn" title="切換深淺色">◐</button>
+      <button class="icon-btn" id="lock-btn" title="上鎖">🔒</button>
+    </header>
+    <nav class="nav">
+      <a href="#/" data-r="home"><span>⌂</span>首頁</a>
+      <a href="#/tools" data-r="tools"><span>◫</span>工具庫</a>
+      <a href="#/analyses" data-r="analyses"><span>☰</span>我的分析</a>
+      <a href="#/settings" data-r="settings"><span>⚙</span>設定</a>
+    </nav>
+    <main id="view"></main>
+  </div>
+
+  <div id="print-root"></div>
+  <div id="toast-root"></div>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
