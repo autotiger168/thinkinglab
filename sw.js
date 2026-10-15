@@ -1,9 +1,9 @@
 // ThinkingLab — 離線快取（只快取網站程式，不碰 GitHub API 與使用者資料）
-const CACHE = 'thinkinglab-v1.0.0';
+const CACHE = 'thinkinglab-v3.0.0';
 const SHELL = [
   './', './index.html', './css/style.css', './icon.svg', './manifest.webmanifest',
   './js/app.js', './js/store.js', './js/db.js', './js/crypto.js', './js/github.js',
-  './js/tools.js', './js/editors.js', './js/figure.js', './js/export.js', './js/ui.js',
+  './js/tools.js', './js/tools-phase2.js', './js/tools-phase3.js', './js/editors.js', './js/figure.js', './js/export.js', './js/ui.js',
 ];
 
 self.addEventListener('install', (e) => {

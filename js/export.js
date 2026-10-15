@@ -1,6 +1,6 @@
 // ThinkingLab — 匯出：PNG / JPG / SVG / PDF（列印）/ Markdown
 import { renderFigure } from './figure.js';
-import { TOOLS, categoryOf, riskLevel, decisionTotals } from './tools.js';
+import { TOOLS, categoryOf, riskLevel, decisionTotals, paretoData, dtreeEV, krProgress, objProgress, findLoops } from './tools.js';
 import { esc, download, safeName, fmtDate, stamp } from './ui.js';
 
 export const fileBase = (a) => `${safeName(a.title)}_${TOOLS[a.toolId].name.replace(/\s+/g, '')}`;
@@ -98,8 +98,9 @@ export function toMarkdown(a) {
       })(c.root, 0);
       break;
     case 'matrix':
+      if (c.axes) md += `橫軸：${c.axes.cols.join(' ↔ ')}；縱軸：${c.axes.rows.join(' ↔ ')}\n\n`;
       tool.quadrants.forEach((q, i) => {
-        md += `## ${q.title}\n\n${(c.quadrants[i] || []).map((t) => `- ${t}`).join('\n') || '（無）'}\n\n`;
+        md += `## ${(c.titles && c.titles[i]) || q.title}\n\n${(c.quadrants[i] || []).map((t) => `- ${t}`).join('\n') || '（無）'}\n\n`;
       });
       break;
     case 'qa':
@@ -117,6 +118,62 @@ export function toMarkdown(a) {
         const cell = (v) => String(v || '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
         md += `| R${i + 1} | ${cell(r.desc)} | ${cell(r.cat)} | ${r.p} | ${r.i} | ${s} | ${riskLevel(s).label} | ${r.strategy} | ${cell(r.response)} | ${cell(r.owner)} | ${r.status} |\n`;
       });
+      break;
+    case 'fishbone':
+      md += `**問題：${c.problem || '—'}**\n\n`;
+      c.cats.forEach((cat) => { md += `## ${cat.name}\n\n${cat.causes.map((t) => `- ${t}`).join('\n') || '（無）'}\n\n`; });
+      break;
+    case 'groups':
+      if (c.topic) md += `**主題：${c.topic}**\n\n`;
+      c.groups.forEach((g) => {
+        const items = tool.voting ? [...g.items].sort((p, q) => (q.v || 0) - (p.v || 0)) : g.items;
+        md += `## ${g.name}\n\n${items.map((it) => `- ${it.t}${tool.voting ? `（▲${it.v || 0}）` : ''}`).join('\n') || '（無）'}\n\n`;
+      });
+      break;
+    case 'table': {
+      const cell = (v) => String(v || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+      if (c.topic) md += `**${c.topic}**\n\n`;
+      md += `| ${cell(tool.table.rowLabel || '')} | ${c.cols.map(cell).join(' | ')} |\n|---|${c.cols.map(() => '---').join('|')}|\n`;
+      c.rows.forEach((r, i) => { md += `| **${cell(r)}** | ${c.cols.map((_, j) => (tool.table.select && c.sel[i] === j ? '✅ ' : '') + cell(c.cells[i][j])).join(' | ')} |\n`; });
+      if (tool.table.emotion) md += `| **情緒** | ${c.emo.map((v) => (v > 0 ? '+' + v : v)).join(' | ')} |\n`;
+      break;
+    }
+    case 'rows': {
+      const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\n/g, ' ');
+      if (tool.pareto) {
+        md += `| 排名 | 項目 | 數量 | 比例 | 累積 |\n|---|---|---|---|---|\n`;
+        paretoData(c.rows).forEach((d, i) => { md += `| ${i + 1} | ${cell(d.name)} | ${d.n} | ${d.pct.toFixed(1)}% | ${d.cum.toFixed(1)}% |\n`; });
+      } else {
+        const sorted = [...c.rows].sort((p, q) => tool.score(q) - tool.score(p));
+        md += `| ${tool.fields.map((f) => f.label).join(' | ')} | ${tool.scoreLabel} |\n|${tool.fields.map(() => '---').join('|')}|---|\n`;
+        sorted.forEach((r) => { md += `| ${tool.fields.map((f) => cell(r[f.key])).join(' | ')} | **${tool.score(r)}** |\n`; });
+      }
+      break;
+    }
+    case 'dtree':
+      md += `**決定：${c.decision || '—'}**\n\n`;
+      c.options.forEach((o) => {
+        const { ev } = dtreeEV(o);
+        md += `## ${o.name}（期望值 ${ev} ${c.unit || ''}）\n\n${Number(o.cost) ? `成本：${o.cost}\n\n` : ''}${o.outcomes.map((x) => `- ${x.name}：機率 ${x.p}%，價值 ${x.v}`).join('\n')}\n\n`;
+      });
+      break;
+    case 'causal': {
+      const name = (id) => (c.vars.find((v) => v.id === id) || {}).name || '?';
+      md += `## 因果連結\n\n${c.links.map((l) => `- ${name(l.from)} →(${l.sign === '-' ? '−' : '+'}) ${name(l.to)}`).join('\n') || '（無）'}\n\n## 迴路\n\n`;
+      md += findLoops(c).map((l, i) => `- ${l.type}${i + 1}（${l.type === 'R' ? '增強' : '調節'}）：${l.nodes.map((n) => n.name).join(' → ')} → ${l.nodes[0].name}`).join('\n') || '（無）';
+      md += '\n';
+      break;
+    }
+    case 'okr':
+      if (c.period) md += `**期間：${c.period}**\n\n`;
+      c.objectives.forEach((o, i) => {
+        md += `## O${i + 1}：${o.o || '—'}（${Math.round(objProgress(o) * 100)}%）\n\n`;
+        o.krs.forEach((k, j) => { md += `- KR${j + 1}：${k.t || '—'}｜${k.start} → ${k.target} ${k.unit || ''}，目前 ${k.current}（${Math.round(krProgress(k) * 100)}%）\n`; });
+        md += '\n';
+      });
+      break;
+    case 'canvas':
+      tool.blocks.forEach((b) => { md += `## ${b.title}\n\n${(c.blocks[b.key] || []).map((t) => `- ${t}`).join('\n') || '（無）'}\n\n`; });
       break;
     case 'decision': {
       const t = decisionTotals(c);

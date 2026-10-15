@@ -278,16 +278,19 @@ async function route() {
   view.onclick = null;
   view.scrollTop = 0;
   window.scrollTo(0, 0);
-  const fn = { home: viewHome, tools: viewTools, tool: viewTool, analyses: viewAnalyses, trash: viewTrash, editor: viewEditor, settings: viewSettings }[r.name] || viewHome;
+  const fn = { home: viewHome, tools: viewTools, tool: viewTool, analyses: viewAnalyses, trash: viewTrash, editor: viewEditor, settings: viewSettings, stats: viewStats }[r.name] || viewHome;
   fn(r.id);
 }
 window.addEventListener('hashchange', route);
 
 /* ================= 共用片段 ================= */
 const pendingNew = new Map();
-function newAnalysis(toolId) {
+function newAnalysis(toolId, extra = {}) {
   const tool = TOOLS[toolId];
-  const a = { id: store.uid(), toolId, title: '', tags: [], notes: '', content: defaultContent(tool), createdAt: Date.now(), updatedAt: Date.now(), archived: false, deletedAt: null };
+  const a = { id: store.uid(), toolId, title: '', tags: [], notes: '', links: [], content: defaultContent(tool), createdAt: Date.now(), updatedAt: Date.now(), archived: false, deletedAt: null };
+  if (extra.links) a.links = extra.links;
+  if (extra.tags) a.tags = extra.tags;
+  if (extra.refId && 'refId' in a.content) a.content.refId = extra.refId;
   pendingNew.set(a.id, a);
   location.hash = `#/a/${a.id}`;
 }
@@ -353,7 +356,7 @@ function viewTools() {
   const counts = {};
   live().forEach((a) => { counts[a.toolId] = (counts[a.toolId] || 0) + 1; });
   view.innerHTML = `
-    <div class="page-head"><h1>工具庫</h1><p class="muted">${Object.keys(TOOLS).length} 個可用工具，${COMING.length} 個即將推出</p></div>
+    <div class="page-head"><h1>工具庫</h1><p class="muted">${Object.keys(TOOLS).length} 個思考工具，分成 ${CATEGORIES.length} 大類${COMING.length ? `，另有 ${COMING.length} 個即將推出` : ''}</p></div>
     <input class="search" id="tsearch" placeholder="搜尋工具…">
     <div id="tlist"></div>`;
   const draw = (q = '') => {
@@ -507,6 +510,7 @@ function viewEditor(id) {
           <hr><button data-exp="pdf-p">PDF（A4 直式）</button><button data-exp="pdf-l">PDF（A4 橫式）</button>
           <hr><button data-exp="md">Markdown</button></div></details>
         <details class="menu"><summary class="btn">⋯</summary><div class="menu-pop menu-right">
+          <button data-act="extend">延伸分析…</button><button data-act="link">連結其他分析…</button><hr>
           <button data-act="dup">建立副本</button><button data-act="arch">${a.archived ? '取消封存' : '封存'}</button>
           <button data-act="help">工具說明</button><hr><button data-act="del" class="danger">移到垃圾桶</button></div></details>
       </div>
@@ -514,6 +518,7 @@ function viewEditor(id) {
     <div class="ed-layout tab-${wide}">
       <section class="ed-pane"><div id="ed-root"></div>
         <label class="notes-l">備註<textarea id="notes" class="grow" rows="3" placeholder="補充說明、結論、待辦…">${esc(a.notes || '')}</textarea></label>
+        <div class="links-sec" id="links"></div>
       </section>
       <section class="fig-pane"><div class="fig-box" id="fig"></div></section>
     </div>`;
@@ -550,6 +555,61 @@ function viewEditor(id) {
   const notes = $('#notes');
   notes.addEventListener('input', () => { a.notes = notes.value; notes.style.height = 'auto'; notes.style.height = notes.scrollHeight + 2 + 'px'; changed(); });
 
+  if (!Array.isArray(a.links)) a.links = [];
+  const linksBox = $('#links');
+  const chip = (o, back) => {
+    const t = TOOLS[o.toolId];
+    return `<span class="link-chip ${back ? 'back' : ''}" style="--cc:${categoryOf(t).color}" title="${back ? '這份分析連結到目前的分析' : ''}"><a href="#/a/${o.id}">${esc(o.title || '未命名')}</a><small>${esc(t.name)}${back ? ' · 反向' : ''}</small>${back ? '' : `<button class="x" data-unlink="${o.id}" title="移除連結">×</button>`}</span>`;
+  };
+  const renderLinks = () => {
+    const out = a.links.map((lid) => store.get(lid)).filter((o) => o && !o.deletedAt);
+    const inc = live().filter((o) => o.id !== a.id && (o.links || []).includes(a.id) && !a.links.includes(o.id));
+    linksBox.innerHTML = `<h4>關聯分析 <button class="btn btn-sm btn-ghost" data-act2="link">＋ 連結</button><button class="btn btn-sm btn-ghost" data-act2="extend">＋ 延伸</button></h4>
+      ${out.length || inc.length ? `<div class="link-chips">${out.map((o) => chip(o, false)).join('')}${inc.map((o) => chip(o, true)).join('')}</div>` : '<p class="hint">還沒有關聯。可以把相關的分析串起來，例如 SWOT → TOWS → 決策矩陣。</p>'}`;
+  };
+  renderLinks();
+  const pickLink = async () => {
+    const cands = live().filter((o) => o.id !== a.id && !a.links.includes(o.id)).sort((p, q) => q.updatedAt - p.updatedAt);
+    if (!cands.length) return toast('沒有其他可以連結的分析');
+    const id2 = await modal({
+      title: '連結其他分析', wide: true,
+      body: `<input class="search" id="lk-q" placeholder="搜尋標題或工具…" style="margin:0;max-width:none"><div class="lk-list">${cands.map((o) => `<button class="lk-item" data-lk="${o.id}" data-s="${esc(((o.title || '') + ' ' + TOOLS[o.toolId].name).toLowerCase())}">${toolBadge(TOOLS[o.toolId])}<b>${esc(o.title || '未命名')}</b><small class="muted">${relTime(o.updatedAt)}</small></button>`).join('')}</div>`,
+      actions: [{ label: '取消', value: null }],
+      onOpen: (w, close) => {
+        $('#lk-q', w).addEventListener('input', (ev) => { const q = ev.target.value.trim().toLowerCase(); $$('.lk-item', w).forEach((b) => { b.hidden = q && !b.dataset.s.includes(q); }); });
+        w.addEventListener('click', (ev) => { const b = ev.target.closest('[data-lk]'); if (b) close(b.dataset.lk); });
+      },
+    });
+    if (!id2) return;
+    a.links.push(id2);
+    renderLinks();
+    changed();
+    toast('已連結');
+  };
+  const pickExtend = async () => {
+    const rel = (tool.related || []).filter((r) => TOOLS[r]);
+    const tid = await modal({
+      title: `從「${a.title || tool.name}」延伸分析`, wide: true,
+      body: `<p class="hint">新的分析會自動連結回這一份。</p>
+        ${rel.length ? `<div class="pick"><div class="pick-cat" style="--cc:${cat.color}"><h4>建議的下一步</h4>${rel.map((r) => `<button class="pick-btn" data-ext="${r}"><b>${esc(TOOLS[r].name)}</b><small>${esc(TOOLS[r].summary)}</small></button>`).join('')}</div></div>` : ''}
+        <details style="margin-top:12px"><summary class="link-btn">所有工具</summary><div class="pick" style="margin-top:10px">${CATEGORIES.map((cg) => {
+          const ts = Object.values(TOOLS).filter((t) => t.category === cg.id);
+          return `<div class="pick-cat" style="--cc:${cg.color}"><h4>${esc(cg.name)}</h4>${ts.map((t) => `<button class="pick-btn" data-ext="${t.id}"><b>${esc(t.name)}</b></button>`).join('')}</div>`;
+        }).join('')}</div></details>`,
+      actions: [{ label: '取消', value: null }],
+      onOpen: (w, close) => w.addEventListener('click', (ev) => { const b = ev.target.closest('[data-ext]'); if (b) close(b.dataset.ext); }),
+    });
+    if (!tid) return;
+    await ensureSaved();
+    newAnalysis(tid, { links: [a.id], tags: [...(a.tags || [])], refId: TOOLS[tid].ref === a.toolId ? a.id : null });
+  };
+  linksBox.addEventListener('click', (e) => {
+    const u = e.target.closest('[data-unlink]');
+    if (u) { a.links = a.links.filter((l) => l !== u.dataset.unlink); renderLinks(); changed(); return; }
+    const b = e.target.closest('[data-act2]');
+    if (b) (b.dataset.act2 === 'link' ? pickLink : pickExtend)();
+  });
+
   const setTab = (t) => {
     layout.className = `ed-layout tab-${t}`;
     $$('.ed-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t));
@@ -578,13 +638,15 @@ function viewEditor(id) {
       if (k === 'dup') {
         await ensureSaved();
         const b = structuredClone(a);
-        b.id = store.uid(); b.title = (a.title || '未命名') + '（副本）'; b.createdAt = Date.now();
+        b.id = store.uid(); b.title = (a.title || '未命名') + '（副本）'; b.createdAt = Date.now(); b.links = [a.id];
         await store.save(b);
         location.hash = `#/a/${b.id}`;
         toast('已建立副本');
       }
       if (k === 'arch') { a.archived = !a.archived; await persist.flush(); act.textContent = a.archived ? '取消封存' : '封存'; toast(a.archived ? '已封存' : '已取消封存'); }
       if (k === 'help') showToolHelp(tool);
+      if (k === 'link') pickLink();
+      if (k === 'extend') pickExtend();
       if (k === 'del') {
         if (isNew) { pendingNew.delete(a.id); persist.cancel(); location.hash = '#/analyses'; return; }
         if (await confirmDialog('移到垃圾桶？30 天內可以還原。', { okLabel: '移到垃圾桶', danger: true })) {
@@ -618,6 +680,57 @@ function showToolHelp(t) {
     body: `<p class="lead">${esc(t.summary)}</p><h4>操作步驟</h4><ol>${t.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol><h4>範例</h4><p>${esc(t.example)}</p><h4>小技巧</h4><p>${esc(t.tips)}</p>`,
     actions: [{ label: '關閉', primary: true }],
   });
+}
+
+/* ================= 統計 ================= */
+function viewStats() {
+  const list = live();
+  const now = Date.now();
+  const byTool = {}, byCat = {}, tags = {};
+  list.forEach((a) => {
+    byTool[a.toolId] = (byTool[a.toolId] || 0) + 1;
+    const c = TOOLS[a.toolId].category;
+    byCat[c] = (byCat[c] || 0) + 1;
+    (a.tags || []).forEach((t) => { tags[t] = (tags[t] || 0) + 1; });
+  });
+  const month = new Date(); month.setDate(1); month.setHours(0, 0, 0, 0);
+  const thisMonth = list.filter((a) => a.createdAt >= month.getTime()).length;
+  const linkCount = list.reduce((s, a) => s + (a.links || []).length, 0);
+  // 近 12 週（以週一為起點）
+  const start = new Date(); start.setHours(0, 0, 0, 0); start.setDate(start.getDate() - ((start.getDay() + 6) % 7) - 7 * 11);
+  const weeks = Array.from({ length: 12 }, (_, i) => ({ t: start.getTime() + i * 7 * 86400000, n: 0 }));
+  list.forEach((a) => { const i = Math.floor((a.updatedAt - start.getTime()) / (7 * 86400000)); if (i >= 0 && i < 12) weeks[i].n++; });
+  const wmax = Math.max(1, ...weeks.map((w) => w.n));
+  const catMax = Math.max(1, ...Object.values(byCat));
+  const topTools = Object.entries(byTool).sort((p, q) => q[1] - p[1]).slice(0, 10);
+  const toolMax = Math.max(1, ...topTools.map((x) => x[1]));
+  const unused = Object.values(TOOLS).filter((t) => !byTool[t.id]);
+  const tagList = Object.entries(tags).sort((p, q) => q[1] - p[1]);
+  const tagMax = Math.max(1, ...tagList.map((x) => x[1]));
+  view.innerHTML = `
+    <div class="page-head"><h1>統計</h1><p class="muted">你的思考足跡</p></div>
+    <div class="kpis">
+      <div class="kpi"><b>${list.length}</b><span>份分析</span></div>
+      <div class="kpi"><b>${Object.keys(byTool).length}<small style="font-size:16px;color:var(--muted)"> / ${Object.keys(TOOLS).length}</small></b><span>用過的工具</span></div>
+      <div class="kpi"><b>${thisMonth}</b><span>本月新增</span></div>
+      <div class="kpi"><b>${Object.keys(tags).length}</b><span>個標籤</span></div>
+      <div class="kpi"><b>${linkCount}</b><span>條關聯</span></div>
+    </div>
+    <div class="st-grid">
+      <section class="st-card"><h3>近 12 週活動</h3>
+        <div class="weeks">${weeks.map((w) => { const d = new Date(w.t); return `<div title="${d.getMonth() + 1}/${d.getDate()} 那週：${w.n} 份"><b>${w.n || ''}</b><i style="height:${(w.n / wmax) * 80}%"></i><span>${d.getMonth() + 1}/${d.getDate()}</span></div>`; }).join('')}</div></section>
+      <section class="st-card"><h3>各類別</h3>
+        ${CATEGORIES.map((c) => `<div class="hbar" style="--cc:${c.color}"><span>${esc(c.name)}</span><i style="width:${((byCat[c.id] || 0) / catMax) * 100}%"></i><em>${byCat[c.id] || 0}</em></div>`).join('')}</section>
+      <section class="st-card"><h3>最常用的工具</h3>
+        ${topTools.length ? topTools.map(([id, n]) => `<div class="hbar" style="--cc:${categoryOf(TOOLS[id]).color}"><a href="#/tool/${id}">${esc(TOOLS[id].name)}</a><i style="width:${(n / toolMax) * 100}%"></i><em>${n}</em></div>`).join('') : '<p class="muted">還沒有資料</p>'}</section>
+      <section class="st-card"><h3>標籤</h3>
+        ${tagList.length ? `<div class="tag-cloud">${tagList.map(([t, n]) => `<a href="#/analyses" data-tag="${esc(t)}" style="font-size:${13 + (n / tagMax) * 9}px">#${esc(t)}<small class="muted"> ${n}</small></a>`).join('')}</div>` : '<p class="muted">還沒有標籤。在分析標題下方可以加標籤。</p>'}</section>
+    </div>
+    ${unused.length ? `<section class="sec"><h2>還沒試過的工具（${unused.length}）</h2><div class="quick">${unused.slice(0, 12).map((t) => `<a class="quick-btn" href="#/tool/${t.id}" style="--cc:${categoryOf(t).color}"><b>${esc(t.name)}</b><small>${esc(categoryOf(t).name)}</small></a>`).join('')}</div></section>` : ''}`;
+  view.onclick = (e) => {
+    const t = e.target.closest('[data-tag]');
+    if (t) { filt.tag = t.dataset.tag; filt.q = ''; filt.tool = ''; }
+  };
 }
 
 /* ================= 設定 ================= */
@@ -679,7 +792,7 @@ function viewSettings() {
     </section>
 
     <section class="set-sec"><h2>ℹ️ 關於</h2>
-      <p class="muted">ThinkingLab v1.0 · ${Object.keys(TOOLS).length} 個思考工具 · 加密：PBKDF2-SHA256（60 萬次）+ AES-256-GCM</p>
+      <p class="muted">ThinkingLab v3.0 · ${Object.keys(TOOLS).length} 個思考工具 · 加密：PBKDF2-SHA256（60 萬次）+ AES-256-GCM</p>
       <p class="muted" id="persist-st"></p>
       <button class="btn btn-danger" id="wipe">清除此裝置的資料</button>
     </section>`;

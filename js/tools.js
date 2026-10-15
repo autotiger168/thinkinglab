@@ -1,5 +1,7 @@
 // ThinkingLab — 思考工具定義（說明 + 範本設定）
 // 新增工具：在 TOOLS 加一筆，template 指定使用哪一種元件即可
+import { PHASE2 } from './tools-phase2.js';
+import { PHASE3 } from './tools-phase3.js';
 export const CATEGORIES = [
   { id: 'diverge', name: '發散發想', desc: '產生大量點子', color: '#d9822b' },
   { id: 'converge', name: '歸納收斂', desc: '把想法整理成結構', color: '#3a7ca5' },
@@ -190,51 +192,11 @@ export const TOOLS = {
   },
 };
 
+Object.assign(TOOLS, PHASE2, PHASE3);
+
 // 即將推出的工具（工具庫中顯示為預告）
-export const COMING = [
-  ['diverge', '腦力激盪', '先求量、不批評'],
-  ['diverge', 'SCAMPER 奔馳法', '7 個問題改造既有東西'],
-  ['diverge', '六頂思考帽', '6 種角度輪流思考'],
-  ['diverge', '形態分析法', '拆維度、列選項、交叉組合'],
-  ['diverge', '逆向腦力激盪', '先想怎麼失敗，再反過來'],
-  ['converge', '金字塔原理', '結論先講、分層支撐'],
-  ['converge', 'KJ 法（親和圖）', '零散想法依相似性分群'],
-  ['converge', '假說思考', '先提暫定答案再驗證'],
-  ['converge', '第一性原理', '拆到最基本事實再推導'],
-  ['problem', '魚骨圖', '人機料法環測找原因'],
-  ['problem', '柏拉圖分析', '找出 80% 問題的 20% 原因'],
-  ['problem', 'IS / IS NOT', '比對有發生與沒發生之處'],
-  ['problem', '8D 報告', '8 步驟解決並防止再發'],
-  ['problem', 'A3 報告', '一頁講清楚問題與對策'],
-  ['strategy', 'PEST / PESTEL', '總體環境分析'],
-  ['strategy', '波特五力', '產業競爭強度'],
-  ['strategy', '3C 分析', '公司、顧客、競爭者'],
-  ['strategy', 'BCG 矩陣', '明星、金牛、問號、落水狗'],
-  ['strategy', '安索夫矩陣', '市場 × 產品成長策略'],
-  ['strategy', '藍海策略 ERRC', '消除、減少、提升、創造'],
-  ['strategy', '商業模式畫布', '9 格描述商業模式'],
-  ['decision', '決策樹與期望值', '把機率與結果算清楚'],
-  ['decision', '力場分析', '推動力 vs 阻力'],
-  ['decision', '10/10/10 法則', '10 分鐘、10 個月、10 年後'],
-  ['decision', '事前驗屍', '假設失敗，回推原因'],
-  ['priority', 'MoSCoW', '必須、應該、可以、不做'],
-  ['priority', 'RICE 評分', '觸及、影響、信心、投入'],
-  ['priority', 'Kano 模型', '基本、期望、驚喜需求'],
-  ['risk', 'FMEA', '嚴重度 × 發生度 × 偵測度'],
-  ['risk', '情境規劃', '兩個不確定因素、四種未來'],
-  ['system', '冰山模型', '事件、模式、結構、心智'],
-  ['system', '因果迴路圖', '增強與調節迴路'],
-  ['system', '利害關係人地圖', '權力 × 利益'],
-  ['system', 'PDCA / OODA', '持續改善循環'],
-  ['human', '設計思考', '同理、定義、發想、原型、測試'],
-  ['human', '同理心地圖', '想、感受、看、聽、說、做'],
-  ['human', '顧客旅程地圖', '每個接觸點的體驗'],
-  ['human', 'JTBD', '顧客雇用產品完成什麼任務'],
-  ['plan', 'SMART 目標', '具體、可衡量、可達成…'],
-  ['plan', 'OKR', '目標與關鍵結果'],
-  ['plan', 'GROW 模型', '目標、現況、選項、意願'],
-  ['plan', 'KPT 回顧', 'Keep、Problem、Try'],
-];
+// 全部工具都已上線；之後要預告新工具時，在這裡加 [分類, 名稱, 說明]
+export const COMING = [];
 
 export function categoryOf(tool) {
   return CATEGORIES.find((c) => c.id === tool.category);
@@ -247,11 +209,31 @@ export const nid = () => 'n' + Date.now().toString(36) + (nodeSeq++).toString(36
 export function defaultContent(tool) {
   switch (tool.template) {
     case 'grid9': return { cells: Array(9).fill('') };
-    case 'tree': return { root: { id: nid(), text: tool.layout === 'mind' ? '中心主題' : '要拆解的議題', children: [] } };
-    case 'matrix': return { quadrants: [[], [], [], []], refId: null };
+    case 'tree': return { root: { id: nid(), text: { mind: '中心主題', pyramid: '核心結論（一句話）' }[tool.layout] || '要拆解的議題', children: [] } };
+    case 'matrix': return tool.editableAxes
+      ? { quadrants: [[], [], [], []], refId: null, axes: { cols: [...tool.cols], rows: [...tool.rows] }, titles: tool.quadrants.map((q) => q.title) }
+      : { quadrants: [[], [], [], []], refId: null };
+    case 'groups': return { topic: '', groups: tool.groups.map((name) => ({ id: nid(), name, items: [] })) };
+    case 'table': {
+      const t = tool.table;
+      const rows = [...(t.rows || t.defRows)], cols = [...(t.cols || t.defCols)];
+      return { topic: '', rows, cols, cells: rows.map(() => cols.map(() => '')), sel: rows.map(() => -1), emo: cols.map(() => 0) };
+    }
+    case 'rows': return { rows: [] };
+    case 'dtree': return {
+      decision: '', unit: '萬元',
+      options: [
+        { id: nid(), name: '選項 A', cost: 0, outcomes: [{ id: nid(), name: '好的結果', p: 50, v: 0 }, { id: nid(), name: '不好的結果', p: 50, v: 0 }] },
+        { id: nid(), name: '選項 B', cost: 0, outcomes: [{ id: nid(), name: '結果', p: 100, v: 0 }] },
+      ],
+    };
+    case 'causal': return { vars: [], links: [] };
+    case 'okr': return { period: '', objectives: [{ id: nid(), o: '', krs: [{ id: nid(), t: '', start: 0, target: 100, current: 0, unit: '' }] }] };
     case 'qa': return { sections: Object.fromEntries(tool.sections.map((s) => [s.key, ''])) };
     case 'chain': return { problem: '', whys: Array.from({ length: 5 }, () => ({ q: '', a: '' })), root: '', action: '' };
     case 'risk': return { risks: [] };
+    case 'fishbone': return { problem: '', cats: tool.cats.map((name) => ({ id: nid(), name, causes: [] })) };
+    case 'canvas': return { blocks: Object.fromEntries(tool.blocks.map((b) => [b.key, []])) };
     case 'decision': {
       const o1 = nid(), o2 = nid(), c1 = nid(), c2 = nid();
       return {
@@ -292,4 +274,71 @@ export function contentText(c) {
     else if (typeof v === 'object') Object.entries(v).forEach(([k, x]) => { if (k !== 'id') walk(x); });
   })(c);
   return out.join(' ');
+}
+
+/* ---------- Phase 3 計算工具 ---------- */
+export function newRow(tool) {
+  const r = { id: nid() };
+  tool.fields.forEach((f) => { r[f.key] = f.def ?? ''; });
+  return r;
+}
+
+export function rowScores(tool, rows) {
+  return rows.map((r) => {
+    const v = tool.score(r);
+    const lv = tool.level ? tool.level(v, r) : null;
+    return { r, v, lv };
+  });
+}
+
+export function paretoData(rows) {
+  const items = rows.map((r) => ({ name: r.item || '（未命名）', n: Math.max(0, Number(r.n) || 0) })).sort((a, b) => b.n - a.n);
+  const total = items.reduce((s, x) => s + x.n, 0) || 1;
+  let cum = 0;
+  return items.map((x) => { cum += x.n; return { ...x, pct: (x.n / total) * 100, cum: (cum / total) * 100 }; });
+}
+
+export function dtreeEV(o) {
+  const ev = o.outcomes.reduce((s, x) => s + (Number(x.p) || 0) / 100 * (Number(x.v) || 0), 0) - (Number(o.cost) || 0);
+  const psum = o.outcomes.reduce((s, x) => s + (Number(x.p) || 0), 0);
+  return { ev: Math.round(ev * 100) / 100, psum };
+}
+
+export function krProgress(kr) {
+  const s = Number(kr.start) || 0, t = Number(kr.target) || 0, c = Number(kr.current) || 0;
+  if (t === s) return c >= t ? 1 : 0;
+  return Math.max(0, Math.min(1, (c - s) / (t - s)));
+}
+export function objProgress(o) {
+  if (!o.krs.length) return 0;
+  return o.krs.reduce((s, k) => s + krProgress(k), 0) / o.krs.length;
+}
+
+// 因果迴路：找出所有簡單迴路（小型圖），負號偶數 = 增強 R，奇數 = 調節 B
+export function findLoops(c, max = 30) {
+  const ids = c.vars.map((v) => v.id);
+  const idx = new Map(ids.map((id, i) => [id, i]));
+  const adj = ids.map(() => []);
+  c.links.forEach((l) => { if (idx.has(l.from) && idx.has(l.to) && l.from !== l.to) adj[idx.get(l.from)].push({ to: idx.get(l.to), sign: l.sign }); });
+  const loops = [];
+  const seen = new Set();
+  for (let s = 0; s < ids.length && loops.length < max; s++) {
+    const stack = [[s, [s], []]];
+    while (stack.length && loops.length < max) {
+      const [v, path, signs] = stack.pop();
+      for (const e of adj[v]) {
+        if (e.to === s) {
+          const key = path.join('>');
+          if (!seen.has(key)) {
+            seen.add(key);
+            const neg = [...signs, e.sign].filter((x) => x === '-').length;
+            loops.push({ nodes: path.map((i) => c.vars[i]), type: neg % 2 === 0 ? 'R' : 'B' });
+          }
+        } else if (e.to > s && !path.includes(e.to) && path.length < 10) {
+          stack.push([e.to, [...path, e.to], [...signs, e.sign]]);
+        }
+      }
+    }
+  }
+  return loops;
 }
